@@ -13,7 +13,7 @@ A specific version or version constraint can also be specified, in this example,
     version: v1, !pre
 ```
 After the install action has been run, **sver** can be run like any other command available in the GitHub Actions runner:
-```
+```yaml
 - run: |
     # determine latest stable release
     echo -n 'The latest release is '
