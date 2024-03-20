@@ -28,26 +28,30 @@ runs:
       id: determine
       run: |
         # determine version
-        curl \
-          --location "$TMP_SVER_SRC" \
-          --output "$TMP_SVER" \
-          --silent \
-          --show-error
-        chmod 755 "$TMP_SVER"
-        VERSION=$(
-            gh release list \
-              --jq '.[].tagName' \
-              --json tagName \
-              --repo robzr/sver |\
-              "$TMP_SVER" max "$VERSION_CONSTRAINT"
-          )
-        if [ -z "$VERSION" ] ; then
-          echo 'error::title=Invalid sver version requested::Could not find a sver release' \
-               'matching "${{ inputs.version }}", fix value specified in inputs.version.'
-          exit 1
+        if [[ "$VERSION_CONSTRAINT" =~ ^v?([1-9][0-9]*\.[1-9][0-9]*\.[1-9][0-9]*)$ ]] ; then
+          VERSION="v${BASH_REMATCH[1]}"
+        else
+          curl \
+            --location "$TMP_SVER_SRC" \
+            --output "$TMP_SVER" \
+            --silent \
+            --show-error
+          chmod 755 "$TMP_SVER"
+          VERSION=$(
+              gh release list \
+                --jq '.[].tagName' \
+                --json tagName \
+                --repo robzr/sver |\
+                "$TMP_SVER" max "$VERSION_CONSTRAINT"
+            )
+          if [ -z "$VERSION" ] ; then
+            echo 'error::title=Invalid sver version requested::Could not find a sver release' \
+                 'matching "${{ inputs.version }}", fix value specified in inputs.version.'
+            exit 1
+          fi
+          rm -rf "$TMP_SVER"
         fi
         echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-        rm -rf "$TMP_SVER"
       shell: bash
 
     - env:
@@ -58,12 +62,16 @@ runs:
       run: |
         # install sver ${{ steps.determine.outputs.version }}
         mkdir -p "$DESTINATION"
-        curl \
-          --location "$SVER_SRC" \
-          --output "${DESTINATION}/sver" \
-          --silent \
-          --show-error \
-          --write-out 'Received %{size_download} bytes in %{time_total} seconds\n'
+        if ! curl \
+            --location "$SVER_SRC" \
+            --output "${DESTINATION}/sver" \
+            --silent \
+            --show-error \
+            --write-out 'Received %{size_download} bytes in %{time_total} seconds\n' ; then
+          echo 'error::title=Could not donwload sver release::Could not download sver release' \
+               '${VERSION} (${SVER_SRC}), fix value specified in inputs.version.'
+          exit 1
+        fi
         chmod 755 "${DESTINATION}/sver"
         echo "path=${DESTINATION}/sver" >>"${GITHUB_OUTPUT}"
         echo "$DESTINATION" >>"${GITHUB_PATH}"
