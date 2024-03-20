@@ -7,6 +7,12 @@ inputs:
     required: false
 
 outputs:
+  install-command:
+    description: Command which can run outside of composite action to add to path
+    value: ${{ steps.install.outputs.install-command }}
+  path:
+    description: Path of installed version
+    value: ${{ steps.install.outputs.path }}
   version:
     description: Version installed
     value: ${{ steps.determine.outputs.version }}
@@ -22,9 +28,11 @@ runs:
       id: determine
       run: |
         # determine version
-        echo '::group::Retrieving temp version'
-        curl -L "$TMP_SVER_SRC" -o "$TMP_SVER"
-        echo '::endgroup::'
+        curl \
+          --location "$TMP_SVER_SRC" \
+          --output "$TMP_SVER" \
+          --silent \
+          --show-error
         chmod 755 "$TMP_SVER"
         VERSION=$(
             gh release list \
@@ -43,15 +51,20 @@ runs:
       shell: bash
 
     - env:
-        DESTINATION: ${{ runner.temp }}/robzr/sver
+        DESTINATION: ${{ runner.temp }}/robzr/sver-${{ steps.determine.outputs.version }}
         SVER_SRC: https://github.com/robzr/sver/releases/download/${{ steps.determine.outputs.version }}/sver
         VERSION: ${{ steps.determine.outputs.version }}
+      id: install
       run: |
-        # install and add to path
+        # install sver ${{ steps.determine.outputs.version }}
         mkdir -p "$DESTINATION"
-        echo "::group::Retrieving sver ${VERSION}"
-        curl -L "$SVER_SRC" -o "${DESTINATION}/sver"
-        echo '::endgroup::'
+        curl \
+          --location "$SVER_SRC" \
+          --output "${DESTINATION}/sver" \
+          --silent \
+          --show-error \
+          --write-out 'Received %{size_download} bytes in %{time_total} seconds\n'
         chmod 755 "${DESTINATION}/sver"
+        echo "path=${DESTINATION}/sver" >>"${GITHUB_OUTPUT}"
         echo "$DESTINATION" >>"${GITHUB_PATH}"
       shell: bash
