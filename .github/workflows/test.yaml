@@ -1,0 +1,41 @@
+name: Test
+
+on:
+  pull_request:
+
+jobs:
+  test-install:
+    name: Test install
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: install
+        uses: ./install
+
+      - env:
+          INSTALLED_VERSION: ${{ steps.install.outputs.version }}
+        run: |
+          # compare installed version to reported version
+          if [ ! -x "$(command -v sver)" ] ; then
+            echo 'error::sver Installation Failed::Install step completed' \
+              'successfully, but sver executable was not found.'
+            exit 1
+          elif [ -z "$INSTALLED_VERSION" ] ; then
+            echo 'error:sver Installation Failed::Install step completed' \
+              'successfully, but no sver version was reported.'
+            exit 1
+          fi
+          if ! FOUND_VERSION=$(sver version) ; then
+            echo 'error:sver Installation Failed::Install step completed' \
+              "successfully, but could not run sver ($(command -v sver))."
+            exit 1
+          elif [ "$FOUND_VERSION" != "$INSTALLED_VERSION" ] ; then
+            echo 'error:sver Installation Failed::Install step completed' \
+              "successfully, but could found version (${FOUND_VERSION}) does not" \
+              "match reported installe version (${INSTALLED_VERSION})."
+            exit 1
+          else
+            echo 'sver installation successful.'
+          fi
+        shell: bash
