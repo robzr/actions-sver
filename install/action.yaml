@@ -1,0 +1,59 @@
+name: Install sver
+
+inputs:
+  version:
+    default: '!prerelease'
+    description: Specify version or version constraint (defaults to latest stable) - to lock to v1 use 'v1, !pre'
+    required: false
+
+outputs:
+  version:
+    description: Version installed
+    value: ${{ steps.determine.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        path: robzr/sver-v1
+        repository: robzr/sver
+        ref: v1
+
+    - env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION_CONSTRAINT: ${{ inputs.version }}
+      id: determine
+      run: |
+        # determine version
+        VERSION=$(
+            gh release list \
+              --jq '.[].tagName' \
+              --json tagName \
+              --repo robzr/sver |\
+              robzr/sver-v1/sver max "$VERSION_CONSTRAINT"
+          )
+        if [ -z "$VERSION" ] ; then
+          echo 'error::title=Invalid sver version requested::Could not find a sver release' \
+               'matching "${{ inputs.version }}", fix value specified in inputs.version.'
+          exit 1
+        fi
+        echo "Installing sver v${VERSION}"
+        echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+        rm -rf robzr/sver-v1
+      shell: bash
+
+    - uses: actions/checkout@v4
+      with:
+        path: robzr/sver
+        repository: robzr/sver
+        ref: ${{ steps.determine.outputs.version }}
+
+    - env:
+        DESTINATION: ${{ runner.temp }}/robzr/sver
+      run: |
+        # install and add to path
+        mkdir -p "$DESTINATION"
+        cp robzr/sver/sver "$DESTINATION"
+        echo "$DESTINATION" >>"${GITHUB_PATH}"
+      shell: bash
