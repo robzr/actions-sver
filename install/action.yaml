@@ -1,0 +1,70 @@
+name: Install sver
+
+inputs:
+  version:
+    default: '!prerelease'
+    description: Specify version or version constraint (defaults to latest stable) - to lock to v1 use 'v1, !pre'
+    required: false
+
+outputs:
+  install-command:
+    description: Command which can run outside of composite action to add to path
+    value: ${{ steps.install.outputs.install-command }}
+  path:
+    description: Path of installed version
+    value: ${{ steps.install.outputs.path }}
+  version:
+    description: Version installed
+    value: ${{ steps.determine.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - env:
+        GH_TOKEN: ${{ github.token }}
+        TMP_SVER: ${{ runner.temp }}/.sver-tmp
+        TMP_SVER_SRC: https://github.com/robzr/sver/releases/download/v1.2.1/sver
+        VERSION_CONSTRAINT: ${{ inputs.version }}
+      id: determine
+      run: |
+        # determine version
+        curl \
+          --location "$TMP_SVER_SRC" \
+          --output "$TMP_SVER" \
+          --silent \
+          --show-error
+        chmod 755 "$TMP_SVER"
+        VERSION=$(
+            gh release list \
+              --jq '.[].tagName' \
+              --json tagName \
+              --repo robzr/sver |\
+              "$TMP_SVER" max "$VERSION_CONSTRAINT"
+          )
+        if [ -z "$VERSION" ] ; then
+          echo 'error::title=Invalid sver version requested::Could not find a sver release' \
+               'matching "${{ inputs.version }}", fix value specified in inputs.version.'
+          exit 1
+        fi
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        rm -rf "$TMP_SVER"
+      shell: bash
+
+    - env:
+        DESTINATION: ${{ runner.temp }}/robzr/sver-${{ steps.determine.outputs.version }}
+        SVER_SRC: https://github.com/robzr/sver/releases/download/${{ steps.determine.outputs.version }}/sver
+        VERSION: ${{ steps.determine.outputs.version }}
+      id: install
+      run: |
+        # install sver ${{ steps.determine.outputs.version }}
+        mkdir -p "$DESTINATION"
+        curl \
+          --location "$SVER_SRC" \
+          --output "${DESTINATION}/sver" \
+          --silent \
+          --show-error \
+          --write-out 'Received %{size_download} bytes in %{time_total} seconds\n'
+        chmod 755 "${DESTINATION}/sver"
+        echo "path=${DESTINATION}/sver" >>"${GITHUB_OUTPUT}"
+        echo "$DESTINATION" >>"${GITHUB_PATH}"
+      shell: bash
