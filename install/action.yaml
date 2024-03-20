@@ -14,46 +14,44 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-      with:
-        path: robzr/sver-v1
-        repository: robzr/sver
-        ref: v1
-
     - env:
         GH_TOKEN: ${{ github.token }}
+        TMP_SVER: ${{ runner.temp }}/.sver-tmp
+        TMP_SVER_SRC: https://github.com/robzr/sver/releases/download/v1.2.1/sver
         VERSION_CONSTRAINT: ${{ inputs.version }}
       id: determine
       run: |
         # determine version
+        echo '::group::Retrieving temp version'
+        curl -L "$TMP_SVER_SRC" -o "$TMP_SVER"
+        echo '::endgroup::'
+        chmod 755 "$TMP_SVER"
         VERSION=$(
             gh release list \
               --jq '.[].tagName' \
               --json tagName \
               --repo robzr/sver |\
-              robzr/sver-v1/sver max "$VERSION_CONSTRAINT"
+              "$TMP_SVER" max "$VERSION_CONSTRAINT"
           )
         if [ -z "$VERSION" ] ; then
           echo 'error::title=Invalid sver version requested::Could not find a sver release' \
                'matching "${{ inputs.version }}", fix value specified in inputs.version.'
           exit 1
         fi
-        echo "Installing sver v${VERSION}"
-        echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
-        rm -rf robzr/sver-v1
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        rm -rf "$TMP_SVER"
       shell: bash
-
-    - uses: actions/checkout@v4
-      with:
-        path: robzr/sver
-        repository: robzr/sver
-        ref: ${{ steps.determine.outputs.version }}
 
     - env:
         DESTINATION: ${{ runner.temp }}/robzr/sver
+        SVER_SRC: https://github.com/robzr/sver/releases/download/${{ steps.determine.outputs.version }}/sver
+        VERSION: ${{ steps.determine.outputs.version }}
       run: |
         # install and add to path
         mkdir -p "$DESTINATION"
-        cp robzr/sver/sver "$DESTINATION"
+        echo "::group::Retrieving sver ${VERSION}"
+        curl -L "$SVER_SRC" -o "${DESTINATION}/sver"
+        echo '::endgroup::'
+        chmod 755 "${DESTINATION}/sver"
         echo "$DESTINATION" >>"${GITHUB_PATH}"
       shell: bash
